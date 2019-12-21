@@ -1,4 +1,5 @@
 (ns t
+  (:require [clojure.test :refer :all])
   (:gen-class))
 
 (defn read-input [path] (read-string (str "[" (slurp path) "]")))
@@ -13,13 +14,8 @@
   (println "1." (one))
   (println "2." (two)))
 
-(comment
-; this is my scratch pad
-
-(read-input "1.in")
-
-(-main)
-
-)
-
-
+(deftest everything
+  (testing "read-input"
+    (is (= 100 (count (read-input "1.in")))))
+  (testing "main"
+    (is (= nil (-main)))))

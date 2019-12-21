@@ -71,38 +71,37 @@ U98,R91,D20,R16,D67,R40,U7,R15,U6,R7")
     (if (seq pairs)
       (let [[rv ac] (trace-pair rv ac (first pairs))]
         (recur rv ac (rest pairs)))
-      (maybe-assoc rv (last points) (inc ac)))))
+      (maybe-assoc rv (last points) ac))))
 
 (defn cross [[ax1 ay1 ax2 ay2] [bx1 by1 bx2 by2]]
   (let [x1 (max ax1 bx1)
         y1 (max ay1 by1)
         x2 (min ax2 bx2)
         y2 (min ay2 by2)]
-    (when (and (<= x1 x2) (<= y1 y2))
-      [x1 y1 x2 y2])))
-
-(defn best-coord [x1 x2]
-  (if (<= x1 0 x2) 0
-    (if (> x1 0) x1 x2)))
-
-(defn best-point [[x1 y1 x2 y2]] [(best-coord x1 x2) (best-coord y1 y2)])
+    (if (and (<= x1 x2) (<= y1 y2))
+      (point-range-all [x1 y1] [x2 y2])
+      [])))
 
 (defn crosses [ls1 ls2]
-  (map best-point (filter seq (for [l1 ls1 l2 ls2] (cross l1 l2)))))
+  (apply concat (for [l1 ls1 l2 ls2] (cross l1 l2))))
+
+(defn string->crosses [s]
+  (->> s str/split-lines (map str->lines) (apply crosses) (remove #{[0 0]})))
 
 (defn origin-dist [[x y]] (+ (Math/abs x) (Math/abs y)))
 
-(defn best-dist [ls1 ls2]
-  (apply min (filter pos? (map origin-dist (crosses ls1 ls2)))))
+(defn run-one [s] (->> s string->crosses (map origin-dist) (apply min)))
 
-(defn run-one [s]
-  (->> s str/split-lines (map str->lines) (apply best-dist)))
+(defn one [] (->> "3.in" slurp run-one))
 
-(defn one []
-  (->> "3.in" slurp run-one))
+(defn run-two [s]
+  (let [ppair (->> s str/split-lines (map str->points))
+        dists (map trace-points ppair)
+        norm #(reduce + ((apply juxt dists) %))
+        css (->> ppair (map points->lines) (apply crosses) (remove #{[0 0]}))]
+    (apply min (map norm css))))
 
-(defn two []
-  "not implemented")
+(defn two [] (->> "3.in" slurp run-two))
 
 (defn -main [& args]
   (println "1." (one))
@@ -115,7 +114,9 @@ U98,R91,D20,R16,D67,R40,U7,R15,U6,R7")
     (is (= (run-one test3) 135)))
   (testing "test one"
     (is (= (one) 293)))
+  (testing "b-tests"
+    (is (= (run-two test1) 30))
+    (is (= (run-two test2) 610))
+    (is (= (run-two test3) 410)))
   (testing "main"
     (is (= (-main) nil))))
-
-
