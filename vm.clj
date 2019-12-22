@@ -1,6 +1,7 @@
 (ns vm
   (:require [clojure.test :refer :all]
-            [clojure.core.async :as async :refer [chan thread close! <!! >!!]])
+            [clojure.core.async :as async :refer [chan go close!
+                                                  <!! >!! <! >!]])
   (:gen-class))
 
 (def test1 [1002,4,3,4,33])
@@ -17,37 +18,28 @@
 
 (def INPUT (read-string (str "[" (slurp "09.in") "]")))
 
-(defrecord VM [mem pc in out op halt base])
+(defrecord VM [mem pc op halt base])
 
-(defn parse-op [n]
+(defn- parse-op [n]
   (let [s (format "%05d" n)
         opc (mod n 100)]
     (into [opc] (reverse (map #(- (int %) (int \0)) (subs s 0 3))))))
 
-(defn create-vm
-  ([mem] (create-vm mem 0))
-  ([mem pc] (create-vm mem pc (chan)))
-  ([mem pc in] (create-vm mem pc in (chan)))
-  ([mem pc in out]
+(defn create
+  ([mem] (create mem 0))
+  ([mem pc]
    (let [mem (into [] (concat mem (replicate (* 10 (count mem)) 0)))
          op (parse-op (mem pc))]
-     (->VM mem pc in out op false 0))))
+     (->VM mem pc op false 0))))
 
-(defn vm-next
+(defn- vm-next
   ([vm pc] (assoc vm :pc pc :op (parse-op ((.mem vm) pc))))
   ([vm pc i newval & kvs]
    (let [mem (assoc (.mem vm) i newval)
          op (parse-op (mem pc))]
      (apply assoc vm :pc pc :mem mem :op op kvs))))
 
-(defn vm-in [vm pc i]
-  (vm-next vm pc i (<!! (.in vm))))
-
-(defn vm-out [vm pc v]
-  (>!! (.out vm) v)
-  (assoc vm :pc pc :op (parse-op ((.mem vm) pc))))
-
-(defn vm-param [vm i]
+(defn- param [vm i]
   (let [mode ((.op vm) i)
         v ((.mem vm) (+ (.pc vm) i))]
     (case ((.op vm) i)
@@ -56,7 +48,7 @@
       2 ((.mem vm) (+ (.base vm) v))
       (throw (ex-info "unknown mode" {:mode mode})))))
 
-(defn vm-param-ptr [vm i]
+(defn- param-ptr [vm i]
   (let [mode ((.op vm) i)
         base (case mode
                0 0
@@ -64,48 +56,66 @@
                (throw (ex-info "bad write param mode" {:mode mode})))]
     (+ base ((.mem vm) (+ (.pc vm) i)))))
 
-(defn vm-op-3 [vm f]
-  (let [x (vm-param vm 1)
-        y (vm-param vm 2)
-        p (vm-param-ptr vm 3)]
+(defn- op-3 [vm f]
+  (let [x (param vm 1)
+        y (param vm 2)
+        p (param-ptr vm 3)]
     (vm-next vm (+ (.pc vm) 4) p (f x y))))
 
-(defn vm-cond-jump [vm pred]
-  (let [pc (if (pred (vm-param vm 1))
-             (vm-param vm 2)
+(defn- cond-jump [vm pred]
+  (let [pc (if (pred (param vm 1))
+             (param vm 2)
              (+ 3 (.pc vm)))]
     (vm-next vm pc)))
 
-(defn vm-run1 [vm]
+(defn- vm-in [vm v]
+  (assoc (vm-next vm (+ 2 (.pc vm)) (param-ptr vm 1) v) :halt nil))
+
+(defn- vm-out [vm]
+  (assoc (vm-next vm (+ 2 (.pc vm))) :halt nil))
+
+(defn- halt [vm reason & etc] (assoc vm :halt (apply vector reason etc)))
+
+(defn- run1 [vm]
   (case ((.op vm) 0)
-    99 (assoc vm :halt true)
-    1 (vm-op-3 vm +)
-    2 (vm-op-3 vm *)
-    3 (vm-in vm (+ 2 (.pc vm)) (vm-param-ptr vm 1))
-    4 (vm-out vm (+ 2 (.pc vm)) (vm-param vm 1))
-    5 (vm-cond-jump vm #(not (zero? %)))
-    6 (vm-cond-jump vm zero?)
-    7 (vm-op-3 vm #(if (< %1 %2) 1 0))
-    8 (vm-op-3 vm #(if (= %1 %2) 1 0))
-    9 (assoc (vm-next vm (+ 2 (.pc vm))) :base (+ (.base vm) (vm-param vm 1)))
+    99 (halt vm :halt)
+    1 (op-3 vm +)
+    2 (op-3 vm *)
+    3 (halt vm :in)
+    4 (let [v (param vm 1)] (halt vm :out v))
+    5 (cond-jump vm #(not (zero? %)))
+    6 (cond-jump vm zero?)
+    7 (op-3 vm #(if (< %1 %2) 1 0))
+    8 (op-3 vm #(if (= %1 %2) 1 0))
+    9 (assoc (vm-next vm (+ 2 (.pc vm))) :base (+ (.base vm) (param vm 1)))
     (throw (ex-info "unknown op" {:vm vm}))))
 
-(defn vm-run [vm]
-  (if (.halt vm)
-    (do
-      (close! (.out vm))
-      vm)
-    (recur (vm-run1 vm))))
+(defn run
+  ([vm] (run vm (chan)))
+  ([vm in] (run vm in (chan)))
+  ([vm in out]
+   (go
+     (loop [vm vm]
+       (if-let [[reason v] (.halt vm)]
+         (case reason
+           :halt (close! out)
+           :out (do
+                  (>! out v)
+                  (recur (vm-out vm)))
+           :in (recur (vm-in vm (<! in)))
+           (throw (ex-info "weird halt" {:reason reason})))
+         (recur (run1 vm)))))))
 
-(defn vm-run-seq [code inputs]
+(defn run-seq [code inputs]
   (let [in (chan (count inputs))
-        vm (create-vm code 0 in)]
+        out (chan)
+        vm (create code 0)]
     (doseq [v inputs] (>!! in v))
-    (thread (vm-run vm))
-    (take-while some? (repeatedly #(<!! (.out vm))))))
+    (run vm in out)
+    (take-while some? (repeatedly #(<!! out)))))
 
-(defn one [] (vm-run-seq INPUT [1]))
-(defn two [] (vm-run-seq INPUT [2]))
+(defn one [] (run-seq INPUT [1]))
+(defn two [] (run-seq INPUT [2]))
 
 (defn -main [& args]
   (println "1." (one))
@@ -116,7 +126,7 @@
     (is (= (parse-op 2) [2 0 0 0]))
     (is (= (parse-op 1302) [2 3 1 0])))
   (testing "b-tests"
-    (let [run #(-> %1 (vm-run-seq [%2]) last)]
+    (let [run #(-> %1 (run-seq [%2]) last)]
       (is (= (run test2 8) 1))
       (is (= (run test2 7) 0))
 
@@ -127,7 +137,7 @@
       (is (= (run testn 8) 1000))
       (is (= (run testn 19) 1001))))
   (testing "d09 tests"
-    (let [run #(-> %1 (vm-run-seq [%2]) vec)]
+    (let [run #(-> %1 (run-seq [%2]) vec)]
       (is (= (run test-quine 0) test-quine))
       (is (= (run test-bignum 0) [(test-bignum 1)]))
       (is (= (-> (run test-16d 0) last str count) 16)))))
