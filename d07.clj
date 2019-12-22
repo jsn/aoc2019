@@ -1,5 +1,6 @@
 (ns d07
   (:require [clojure.test :refer :all]
+            [clojure.core.async :as async :refer [chan thread close! <!! >!!]]
             [clojure.math.combinatorics :as combo])
   (:gen-class))
 
@@ -24,11 +25,10 @@
 
 (defn create-vm
   ([mem] (create-vm mem 0))
-  ([mem pc] (create-vm mem pc []))
-  ([mem pc in]
-   (let [out clojure.lang.PersistentQueue/EMPTY
-         in (apply conj clojure.lang.PersistentQueue/EMPTY in)
-         op (parse-op (mem pc))]
+  ([mem pc] (create-vm mem pc (chan)))
+  ([mem pc in] (create-vm mem pc in (chan)))
+  ([mem pc in out]
+   (let [op (parse-op (mem pc))]
      (->VM mem pc in out op false))))
 
 (defn vm-next
@@ -39,11 +39,11 @@
      (apply assoc vm :pc pc :mem mem :op op kvs))))
 
 (defn vm-in [vm pc i]
-  (let [in (.in vm)]
-    (vm-next vm pc i (peek in) :in (pop in))))
+  (vm-next vm pc i (<!! (.in vm))))
 
 (defn vm-out [vm pc v]
-  (assoc vm :pc pc :op (parse-op ((.mem vm) pc)) :out (conj (.out vm) v)))
+  (>!! (.out vm) v)
+  (assoc vm :pc pc :op (parse-op ((.mem vm) pc))))
 
 (defn vm-param [vm i]
   (let [mode ((.op vm) i)
@@ -84,7 +84,19 @@
     8 (vm-op-3 vm #(if (= %1 %2) 1 0))
     (throw (ex-info "unknown op" {:vm vm}))))
 
-(defn vm-run [vm] (if (.halt vm) vm (recur (vm-run1 vm))))
+(defn vm-run [vm]
+  (if (.halt vm)
+    (do
+      (close! (.out vm))
+      vm)
+    (recur (vm-run1 vm))))
+
+(defn vm-run-seq [code inputs]
+  (let [in (chan (count inputs))
+        vm (create-vm code 0 in)]
+    (doseq [v inputs] (>!! in v))
+    (thread (vm-run vm))
+    (take-while some? (repeatedly #(<!! (.out vm))))))
 
 ;;;
 
@@ -98,8 +110,7 @@
              65210])
 
 (defn run-amp-1 [code input phase]
-  (let [vm (vm-run (create-vm code 0 [phase input]))]
-    (last (.out vm))))
+  (last (vm-run-seq code [phase input])))
 
 (defn run-amps [code sq] (reduce #(run-amp-1 code %1 %2) 0 sq))
 
@@ -108,8 +119,37 @@
 
 (defn one [] (brute-force INPUT))
 
-(defn two []
-  "not implemented")
+(def test-4 [[3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,
+              27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5]
+             139629729])
+
+(def test-5
+  [[3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,
+    -5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,
+    53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10]
+   18216])
+
+(defn run-amps-b [code sq]
+  (let [chans (mapv (fn [phase] (let [c (chan 20)] (>!! c phase) c)) sq)
+        last-out (chan 20)
+        first-in (first chans)
+        chans (conj chans last-out)]
+    (doseq [[in out] (partition 2 1 chans)]
+      (thread (vm-run (create-vm code 0 in out))))
+    (>!! first-in 0)
+    (loop [rv nil]
+      (let [v (<!! last-out)]
+        ; (println ">>" v)
+        (if v
+          (do
+            (>!! first-in v)
+            (recur v))
+          rv)))))
+
+(defn brute-force-b [code]
+  (->> (range 5 10) combo/permutations (map #(run-amps-b code %)) (apply max)))
+
+(defn two [] (brute-force-b INPUT))
 
 (defn -main [& args]
   (println "1." (one))
@@ -120,7 +160,7 @@
     (is (= (parse-op 2) [2 0 0 0]))
     (is (= (parse-op 1302) [2 3 1 0])))
   (testing "vm-tests"
-    (let [run #(-> %1 (create-vm 0 [%2]) vm-run .out last)]
+    (let [run #(-> %1 (vm-run-seq [%2]) last)]
       (is (= (run test2 8) 1))
       (is (= (run test2 7) 0))
 
@@ -134,5 +174,9 @@
     (is (= (brute-force (test-1 0)) (test-1 1)))
     (is (= (brute-force (test-3 0)) (test-3 1)))
     (is (= (brute-force (test-2 0)) (test-2 1))))
+  
+  (testing "b-tests"
+    (is (= (brute-force-b (test-4 0)) (test-4 1)))
+    (is (= (brute-force-b (test-5 0)) (test-5 1))))
   (testing "a"
     (is (= 511 (count INPUT)))))
