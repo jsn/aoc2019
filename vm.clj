@@ -11,7 +11,11 @@
             1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,
             999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99])
 
-(defrecord VM [mem pc in out op halt])
+(def test-quine [109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99])
+(def test-16d [1102,34915192,34915192,7,4,7,99,0])
+(def test-bignum [104,1125899906842624,99])
+
+(defrecord VM [mem pc in out op halt base])
 
 (defn parse-op [n]
   (let [s (format "%05d" n)
@@ -23,8 +27,9 @@
   ([mem pc] (create-vm mem pc (chan)))
   ([mem pc in] (create-vm mem pc in (chan)))
   ([mem pc in out]
-   (let [op (parse-op (mem pc))]
-     (->VM mem pc in out op false))))
+   (let [mem (into [] (concat mem (replicate (* 10 (count mem)) 0)))
+         op (parse-op (mem pc))]
+     (->VM mem pc in out op false 0))))
 
 (defn vm-next
   ([vm pc] (assoc vm :pc pc :op (parse-op ((.mem vm) pc))))
@@ -46,6 +51,7 @@
     (case ((.op vm) i)
       0 ((.mem vm) v)
       1 v
+      2 ((.mem vm) (+ (.base vm) v))
       (throw (ex-info "unknown mode" {:mode mode})))))
 
 (defn vm-param-ptr [vm i]
@@ -77,6 +83,7 @@
     6 (vm-cond-jump vm zero?)
     7 (vm-op-3 vm #(if (< %1 %2) 1 0))
     8 (vm-op-3 vm #(if (= %1 %2) 1 0))
+    9 (assoc (vm-next vm (+ 2 (.pc vm))) :base (+ (.base vm) (vm-param vm 1)))
     (throw (ex-info "unknown op" {:vm vm}))))
 
 (defn vm-run [vm]
@@ -117,4 +124,9 @@
 
       (is (= (run testn 7) 999))
       (is (= (run testn 8) 1000))
-      (is (= (run testn 19) 1001)))))
+      (is (= (run testn 19) 1001))))
+  (testing "d09 tests"
+    (let [run #(-> %1 (vm-run-seq [%2]) vec)]
+      (is (= (run test-quine 0) test-quine))
+      (is (= (run test-bignum 0) [(test-bignum 1)]))
+      (is (= (-> (run test-16d 0) last str count) 16)))))
