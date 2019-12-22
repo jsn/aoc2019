@@ -1,5 +1,6 @@
 (ns vm
-  (:require [clojure.test :refer :all])
+  (:require [clojure.test :refer :all]
+            [clojure.core.async :as async :refer [chan thread close! <!! >!!]])
   (:gen-class))
 
 (def test1 [1002,4,3,4,33])
@@ -19,11 +20,10 @@
 
 (defn create-vm
   ([mem] (create-vm mem 0))
-  ([mem pc] (create-vm mem pc []))
-  ([mem pc in]
-   (let [out clojure.lang.PersistentQueue/EMPTY
-         in (apply conj clojure.lang.PersistentQueue/EMPTY in)
-         op (parse-op (mem pc))]
+  ([mem pc] (create-vm mem pc (chan)))
+  ([mem pc in] (create-vm mem pc in (chan)))
+  ([mem pc in out]
+   (let [op (parse-op (mem pc))]
      (->VM mem pc in out op false))))
 
 (defn vm-next
@@ -34,11 +34,11 @@
      (apply assoc vm :pc pc :mem mem :op op kvs))))
 
 (defn vm-in [vm pc i]
-  (let [in (.in vm)]
-    (vm-next vm pc i (peek in) :in (pop in))))
+  (vm-next vm pc i (<!! (.in vm))))
 
 (defn vm-out [vm pc v]
-  (assoc vm :pc pc :op (parse-op ((.mem vm) pc)) :out (conj (.out vm) v)))
+  (>!! (.out vm) v)
+  (assoc vm :pc pc :op (parse-op ((.mem vm) pc))))
 
 (defn vm-param [vm i]
   (let [mode ((.op vm) i)
@@ -79,7 +79,19 @@
     8 (vm-op-3 vm #(if (= %1 %2) 1 0))
     (throw (ex-info "unknown op" {:vm vm}))))
 
-(defn vm-run [vm] (if (.halt vm) vm (recur (vm-run1 vm))))
+(defn vm-run [vm]
+  (if (.halt vm)
+    (do
+      (close! (.out vm))
+      vm)
+    (recur (vm-run1 vm))))
+
+(defn vm-run-seq [code inputs]
+  (let [in (chan (count inputs))
+        vm (create-vm code 0 in)]
+    (doseq [v inputs] (>!! in v))
+    (thread (vm-run vm))
+    (take-while some? (repeatedly #(<!! (.out vm))))))
 
 (defn one []
   "not implemented.")
@@ -96,7 +108,7 @@
     (is (= (parse-op 2) [2 0 0 0]))
     (is (= (parse-op 1302) [2 3 1 0])))
   (testing "b-tests"
-    (let [run #(-> %1 (create-vm 0 [%2]) vm-run .out last)]
+    (let [run #(-> %1 (vm-run-seq [%2]) last)]
       (is (= (run test2 8) 1))
       (is (= (run test2 7) 0))
 
