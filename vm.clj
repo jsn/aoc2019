@@ -98,7 +98,9 @@
      (loop [vm vm]
        (if-let [[reason v] (.halt vm)]
          (case reason
-           :halt (close! out)
+           :halt (do
+                   (close! out)
+                   vm)
            :out (do
                   (>! out v)
                   (recur (vm-out vm)))
