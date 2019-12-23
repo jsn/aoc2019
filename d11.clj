@@ -66,7 +66,5 @@
   (println "2." (two)))
 
 (deftest everything
-  (testing "read-input"
-    (is (= 100 (count (read-input "1.in")))))
   (testing "main"
     (is (= nil (-main)))))
