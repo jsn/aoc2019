@@ -24,32 +24,42 @@
 (def N 50)
 (def EMPTY clojure.lang.PersistentQueue/EMPTY)
 
-(defn run-network []
+(defn run-network [mode]
   (let [nodes (map run-one (range N))
         ins (mapv first nodes)
         outs (mapv second nodes)
         ins-map (zipmap ins (range N))
         outs-map (zipmap outs (range N))
-        queues (vec (repeat N EMPTY))]
-    (loop [queues queues]
-      (let [i-alts
-            (for [i (range N) :let [q (queues i) c (ins i)]]
-              [c (if (= EMPTY q) -1 (peek q))])
-            alts (vec (concat outs i-alts))
-            [v c] (async/alts!! alts)]
-        (if-let [node (ins-map c)]
-          (recur (assoc queues node (rest (queues node))))
-          (let [node (outs-map c)
-                [dst x y] v]
-            (if (= dst 255)
-              v
-              (recur (assoc queues dst (conj (queues dst) [x y]))))))))))
+        queues (vec (repeat N EMPTY))
+        prev-nat (atom nil)]
+    (loop [queues queues
+           cnt 0
+           nat nil]
+      (let [cnt (if (every? empty? queues) (inc cnt) 0)]
+        (if (> cnt 2000)
+          (if (= (last @prev-nat) (last nat))
+            (last nat)
+            (do
+              (reset! prev-nat nat)
+              (recur (update queues 0 #(conj % nat)) 0 nat)))
+          (let [i-alts
+                (for [i (range N) :let [q (queues i) c (ins i)]]
+                  [c (if (= EMPTY q) -1 (peek q))])
+                alts (vec (concat outs i-alts))
+                [v c] (async/alts!! alts)]
+            (if-let [node (ins-map c)]
+              (recur (update queues node pop) cnt nat)
+              (let [node (outs-map c)
+                    [dst x y] v]
+                (if (= dst 255)
+                  (do
+                    (println ">>" v)
+                    (if (= mode :one) v (recur queues cnt [x y])))
+                  (recur (update queues dst #(conj % [x y])) cnt nat))))))))))
 
-(defn one []
-  (run-network))
+(defn one [] (run-network :one))
 
-(defn two []
-  "not implemented")
+(defn two [] (run-network :actually-not-one))
 
 (defn -main [& args]
   (println "1." (one))
