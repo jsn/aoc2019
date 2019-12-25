@@ -31,17 +31,17 @@
         ins-map (zipmap ins (range N))
         outs-map (zipmap outs (range N))
         queues (vec (repeat N EMPTY))
-        prev-nat (atom nil)]
+        prev-y (atom nil)]
     (loop [queues queues
            cnt 0
            nat nil]
       (let [cnt (if (every? empty? queues) (inc cnt) 0)]
         (if (> cnt 2000)
-          (if (= (last @prev-nat) (last nat))
-            (last nat)
-            (do
-              (reset! prev-nat nat)
-              (recur (update queues 0 #(conj % nat)) 0 nat)))
+          (let [y (last nat)]
+            (if (= @prev-y y) y
+              (do
+                (reset! prev-y y)
+                (recur (update queues 0 #(conj % nat)) 0 nat))))
           (let [i-alts
                 (for [i (range N) :let [q (queues i) c (ins i)]]
                   [c (if (= EMPTY q) -1 (peek q))])
@@ -54,7 +54,7 @@
                 (if (= dst 255)
                   (do
                     (println ">>" v)
-                    (if (= mode :one) v (recur queues cnt [x y])))
+                    (if (= mode :one) y (recur queues cnt [x y])))
                   (recur (update queues dst #(conj % [x y])) cnt nat))))))))))
 
 (defn one [] (run-network :one))
