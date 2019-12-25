@@ -21,6 +21,10 @@
 
 (defn one [] (run (slurp "16.in") 100))
 
+(let [n 39]
+  (dotimes [i n]
+    (->> i seq-n (take n) (map {-1 "-" 1 "+" 0 0}) println)))
+
 (defn two []
   "not implemented")
 
