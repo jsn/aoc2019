@@ -4,3 +4,4 @@
 /attic
 *.edn
 *.dump
+.rebel*
