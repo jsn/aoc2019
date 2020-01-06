@@ -9,23 +9,22 @@
 (defn read-input [] (read-string (str "[" (slurp "19.in") "]")))
 
 (defn scan-space []
-  (let [code (read-input)]
+  (let [code (read-input)
+        vm (vm/create code)]
     (loop [cnt 0
            [[x y] & ps] (for [y (range 50) x (range 50)] [x y])]
-      (let [in (chan 2) out (chan 1)]
-        (vm/run (vm/create code) in out)
+      (let [outs (vm/run-sync vm [x y])
+            rv (outs 0)]
         (when (zero? x) (println))
-        (>!! in x)
-        (>!! in y)
-        (let [rv (<!! out)]
-          (if-not (#{0 1} rv)
-            (throw (ex-info "bad output" {:out rv}))
-            (print (if (zero? rv) "." "#")))
-          (let [cnt (+ cnt rv)]
-            (if (seq ps) (recur cnt ps)
-              cnt)))))))
+        (if-not (#{0 1} rv)
+          (throw (ex-info "bad output" {:out rv}))
+          (print (if (zero? rv) "." "#")))
+        (let [cnt (+ cnt rv)]
+          (if (seq ps) (recur cnt ps)
+            cnt))))))
+
 (defn one []
-  (scan-space))
+  (time (scan-space)))
 
 (defn two []
   "not implemented")

@@ -108,6 +108,21 @@
            (throw (ex-info "weird halt" {:reason reason})))
          (recur (run1 vm)))))))
 
+(defn run-sync [vm ins]
+  (loop [vm vm
+         ins ins
+         outs []]
+    (if-let [[reason v] (.halt vm)]
+      (case reason
+        :halt outs
+        :out (recur (vm-out vm) ins (conj outs v))
+        :in (let [[in & ins] ins]
+              (when (nil? in)
+                (throw (ex-info "out of inputs" {:vm vm})))
+              (recur (vm-in vm in) ins outs))
+        (throw (ex-info "weird halt" {:reason reason})))
+      (recur (run1 vm) ins outs))))
+
 (defn run-seq [code inputs]
   (let [in (chan (count inputs))
         out (chan)
@@ -142,4 +157,9 @@
     (let [run #(-> %1 (run-seq [%2]) vec)]
       (is (= (run test-quine 0) test-quine))
       (is (= (run test-bignum 0) [(test-bignum 1)]))
-      (is (= (-> (run test-16d 0) last str count) 16)))))
+      (is (= (-> (run test-16d 0) last str count) 16))))
+
+  (testing "sync tests"
+    (is (= (run-sync (create test2) [8]) [1]))
+    (is (= (run-sync (create test2) [7]) [0]))
+    ))
