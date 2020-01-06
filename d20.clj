@@ -151,8 +151,72 @@ YN......#               VT..#....QG
 (defn one []
   (run-one (slurp "20.in") true))
 
-(defn two []
-  "not implemented")
+(defn outer? [world [x y]]
+  (or (#{0 (dec (world :w))} x)
+      (#{0 (dec (world :h))} y)))
+
+(defn neighbors-3d [world [x y z]]
+  (map #(conj % z) (neighbors world [x y])))
+
+(defn connected-3d [world [x y z]]
+  (let [c (connected world [x y])
+        cz (if (outer? world [x y]) (dec z) (inc z))]
+    (if (> cz 100)
+      nil
+      (and c
+           (>= cz 0)
+           (conj c cz)))))
+
+(defn next-move-3d [world p]
+  (let [ne (neighbors-3d world p)]
+    (if-let [c (connected-3d world p)] (conj ne c) ne)))
+
+(defn run-two [pic]
+  (let [world (pic->world pic)
+        entry (conj (get-in world [:portals :entry]) 0)
+        exit (conj (get-in world [:portals :exit]) 0)]
+    (trace world entry next-move-3d #(= exit %))))
+
+(def test3
+"             Z L X W       C                 
+             Z P Q B       K                 
+  ###########.#.#.#.#######.###############  
+  #...#.......#.#.......#.#.......#.#.#...#  
+  ###.#.#.#.#.#.#.#.###.#.#.#######.#.#.###  
+  #.#...#.#.#...#.#.#...#...#...#.#.......#  
+  #.###.#######.###.###.#.###.###.#.#######  
+  #...#.......#.#...#...#.............#...#  
+  #.#########.#######.#.#######.#######.###  
+  #...#.#    F       R I       Z    #.#.#.#  
+  #.###.#    D       E C       H    #.#.#.#  
+  #.#...#                           #...#.#  
+  #.###.#                           #.###.#  
+  #.#....OA                       WB..#.#..ZH
+  #.###.#                           #.#.#.#  
+CJ......#                           #.....#  
+  #######                           #######  
+  #.#....CK                         #......IC
+  #.###.#                           #.###.#  
+  #.....#                           #...#.#  
+  ###.###                           #.#.#.#  
+XF....#.#                         RF..#.#.#  
+  #####.#                           #######  
+  #......CJ                       NM..#...#  
+  ###.#.#                           #.###.#  
+RE....#.#                           #......RF
+  ###.###        X   X       L      #.#.#.#  
+  #.....#        F   Q       P      #.#.#.#  
+  ###.###########.###.#######.#########.###  
+  #.....#...#.....#.......#...#.....#.#...#  
+  #####.#.###.#######.#######.###.###.#.#.#  
+  #.......#.......#.#.#.#.#...#...#...#.#.#  
+  #####.###.#####.#.#.#.#.###.###.#.###.###  
+  #.......#.....#.#...#...............#...#  
+  #############.#.#.###.###################  
+               A O F   N                     
+               A A D   M                     ")
+
+(defn two [] (run-two (slurp "20.in")))
 
 (defn -main [& args]
   (println "1." (one))
@@ -163,5 +227,8 @@ YN......#               VT..#....QG
     (is (= (run-one test1 false) 26))
     (is (= (run-one test1 true) 23))
     (is (nil? (run-one test2 false)))
-    (is (= (run-one test2 true) 58))
-    ))
+    (is (= (run-one test2 true) 58)))
+  (testing "b-tests"
+    (is (= (run-two test1) 26))
+    (is (nil? (run-two test2)))
+    (is (= (run-two test3) 396))))
