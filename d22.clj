@@ -37,8 +37,8 @@ cut -1"
 (defn match-line [l]
   (condp re-matches l
     #"^deal into new stack$" [:new]
-    #"^cut (.+)$" :>> #(vector :cut (Integer. (% 1)))
-    #"^deal with increment (.+)$" :>> #(vector :increment (Integer. (% 1)))
+    #"^cut (.+)$" :>> #(vector :cut (bigint (% 1)))
+    #"^deal with increment (.+)$" :>> #(vector :increment (bigint (% 1)))
     (throw (ex-info "no match" {:line l}))))
 
 (defn parse [s] (->> s str/split-lines (map match-line)))
@@ -61,14 +61,14 @@ cut -1"
 
 (defn ops->ab [ops n]
   (loop [[op & ops'] ops
-         ab [1 0]]
+         ab [1N 0N]]
     (let [ab' (mapv #(mod % n) (op->ab op ab))]
       (if (seq ops') (recur ops' ab')
         ab'))))
 
-(defn ops->fn [ops n]
-  (let [[a b] (ops->ab ops n)]
-    #(mod (+ (* a %) b) n)))
+(defn ab->fn [[a b] n] #(mod (+ (* a %) b) n))
+
+(defn ops->fn [ops n] (ab->fn (ops->ab ops n) n))
 
 (defn project [f n]
   (let [r (range n)
@@ -84,17 +84,63 @@ cut -1"
   (let [f (-> "22.in" slurp parse (ops->fn 10007))]
     (f 2019)))
 
+(def ^:dynamic *BIGDECK*   119315717514047N)
+(def ^:dynamic *MUCHTIMES* 101741582076661N)
+
+(defn mod-big [x] (mod x *BIGDECK*))
+
+(defn *ab [[a1 b1] [a2 b2]]
+  (mapv mod-big [(* a1 a2) (+ (* a1 b2) b1)]))
+
+(defn pow-ab [ab n]
+  (if (= n 1) ab
+    (let [ab2 (*ab ab ab)]
+      (if (zero? (mod n 2))
+        (recur ab2 (/ n 2))
+        (*ab ab (pow-ab ab2 (quot n 2)))))))
+
+(defn pow-mod [x n]
+  (loop [x x
+         n n
+         ac 1]
+    (if (= n 1) (mod-big (* x ac))
+      (let [x2 (mod-big (* x x))
+            ac (if (zero? (mod n 2)) ac (mod-big (* ac x)))]
+        (recur x2 (quot n 2) ac)))))
+
+(defn inv [x] (pow-mod x (- *BIGDECK* 2)))
+
+(defn y->x [a b y]
+  (let [x1 (mod-big (- y b))
+        x (mod-big (* x1 (inv a)))]
+    x))
+
+'(binding [*BIGDECK* 11 *MUCHTIMES* 4]
+  (let [ab (-> (test4 0) parse (ops->ab *BIGDECK*) (pow-ab *MUCHTIMES*))
+        f' (-> (test4 0) parse (ops->fn *BIGDECK*))
+        f (ab->fn ab *BIGDECK*)]
+    (println (project f *BIGDECK*))
+    (println (y->x (ab 0) (ab 1) 5))))
+
 (defn two []
-  "not implemented")
+  (let [ab (-> "22.in" slurp parse (ops->ab *BIGDECK*) (pow-ab *MUCHTIMES*))
+        f (ab->fn ab *BIGDECK*)]
+    (y->x (ab 0) (ab 1) 2020)))
 
 (defn -main [& args]
   (println "1." (one))
-  (println "2." (two)))
+  (println "2." (two))) ; 1487651599921N is too low
+                        ; 14095717263710N is too low
 
 (deftest everything
   (testing "a tests"
     (is (= (run1-10 (test1 0)) (test1 1)))
     (is (= (run1-10 (test2 0)) (test2 1)))
     (is (= (run1-10 (test3 0)) (test3 1)))
-    (is (= (run1-10 (test4 0)) (test4 1)))
-    ))
+    (is (= (run1-10 (test4 0)) (test4 1))))
+  (testing "regressions"
+    (binding [*BIGDECK* 10 *MUCHTIMES* 5]
+      (let [ab (-> (test4 0) parse (ops->ab *BIGDECK*) (pow-ab *MUCHTIMES*))
+            f' (-> (test4 0) parse (ops->fn *BIGDECK*))
+            f (ab->fn ab *BIGDECK*)]
+        (is (= (project f 10) (project (comp f' f' f' f' f') 10)))))))
