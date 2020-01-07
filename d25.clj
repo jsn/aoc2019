@@ -27,6 +27,10 @@
                 "s" "south"
                 "w" "north"
                 "i" "inv"
+                ">" (do
+                      (print "Filename: ")
+                      (flush)
+                      (slurp (read-line)))
                 l)]
           (doseq [c l] (>!! in (int c)))
           (>!! in (int \newline))
