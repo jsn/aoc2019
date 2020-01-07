@@ -1,30 +1,12 @@
 (ns d21
   (:require [clojure.test :refer :all]
             [clojure.string :as str]
-            [clojure.core.async :as async :refer [chan go close!
-                                                  <!! >!! <! >!]]
             [vm])
   (:gen-class))
 
 (defn read-input [] (read-string (str "[" (slurp "21.in") "]")))
 
 (def VM (vm/create (read-input)))
-
-(defn runner []
-  (let [in (chan) out (chan)]
-    (vm/run VM in out)
-    (go (loop []
-          (let [c (<! out)]
-            (when c
-              (print (char c))
-              (when (= (int \newline) c) (flush))
-              (recur)))))
-    (loop []
-      (when-let [l (read-line)]
-        (doseq [c l] (>!! in (int c)))
-        (>!! in (int \newline))
-        (recur)))
-    ))
 
 (defn run-sync [input]
   (let [output (->> input
@@ -51,26 +33,22 @@
 
 (defn one [] (run-one))
 
-(defn run-two []
+(defn two []
   (run-sync
-    "NOT A J
+    "
+    NOT J J
+    AND A J
+    AND B J
+    AND C J
+    NOT J J
+    AND D J
 
-    NOT C T
-    AND D T
-    OR T J
-
-    NOT B T
-    AND D T
-    OR T J
+    OR E T
+    OR H T
+    AND T J
 
     RUN"))
-
-(defn two []
-  "not implemented")
 
 (defn -main [& args]
   (println "1." (one))
   (println "2." (two)))
-
-(deftest everything
-  )
