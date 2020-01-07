@@ -8,20 +8,22 @@
 
 (defn read-input [] (read-string (str "[" (slurp "19.in") "]")))
 
+(def VM (vm/create (read-input)))
+
+(defn tile-at [x y]
+  (let [outs (vm/run-sync VM [x y])
+        rv (outs 0)]
+    (when-not (#{0 1} rv) (throw (ex-info "bad output" {:out rv})))
+    rv))
+
 (defn scan-space []
-  (let [code (read-input)
-        vm (vm/create code)]
-    (loop [cnt 0
-           [[x y] & ps] (for [y (range 50) x (range 50)] [x y])]
-      (let [outs (vm/run-sync vm [x y])
-            rv (outs 0)]
-        (when (zero? x) (println))
-        (if-not (#{0 1} rv)
-          (throw (ex-info "bad output" {:out rv}))
-          (print (if (zero? rv) "." "#")))
-        (let [cnt (+ cnt rv)]
-          (if (seq ps) (recur cnt ps)
-            cnt))))))
+  (loop [cnt 0
+         [[x y] & ps] (for [y (range 50) x (range 50)] [x y])]
+    (let [rv (tile-at x y)
+          cnt (+ cnt rv)]
+      (when (zero? x) (println))
+      (print (get ".#" rv))
+      (if (seq ps) (recur cnt ps) cnt))))
 
 (defn one []
   (time (scan-space)))
