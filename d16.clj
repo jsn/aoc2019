@@ -39,10 +39,10 @@
   (apply vector (take (* n (count v)) (cycle v))))
 
 (defn run2 [s n]
-  (let [tail (halve (repeat-vec (parse s) 10000))
-        pos (- (Integer. (subs s 0 7)) (count tail))
+  (let [pos (Integer. (subs s 0 7))
+        tail (subvec (repeat-vec (parse s) 10000) pos)
         tail' (run2-n tail n)
-        rv (subvec tail' pos (+ pos 8))]
+        rv (subvec tail' 0 8)]
     (apply str rv)))
 
 '(let [n 39]
