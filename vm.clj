@@ -4,6 +4,8 @@
                                                   <!! >!! <! >!]])
   (:gen-class))
 
+(set! *warn-on-reflection* true)
+
 (def test1 [1002,4,3,4,33])
 (def test2 [3,9,8,9,10,9,4,9,99,-1,8])
 (def test3 [3,9,7,9,10,9,4,9,99,-1,8])
@@ -33,51 +35,51 @@
      (->VM mem pc op false 0))))
 
 (defn- vm-next
-  ([vm pc] (assoc vm :pc pc :op (parse-op ((.mem vm) pc))))
-  ([vm pc i newval & kvs]
+  ([^VM vm pc] (assoc vm :pc pc :op (parse-op ((.mem vm) pc))))
+  ([^VM vm pc i newval & kvs]
    (let [mem (assoc (.mem vm) i newval)
          op (parse-op (mem pc))]
      (apply assoc vm :pc pc :mem mem :op op kvs))))
 
-(defn- param [vm i]
+(defn- param [^VM vm i]
   (let [mode ((.op vm) i)
         v ((.mem vm) (+ (.pc vm) i))]
-    (case ((.op vm) i)
+    (case (int ((.op vm) i))
       0 ((.mem vm) v)
       1 v
       2 ((.mem vm) (+ (.base vm) v))
       (throw (ex-info "unknown mode" {:mode mode})))))
 
-(defn- param-ptr [vm i]
+(defn- param-ptr [^VM vm i]
   (let [mode ((.op vm) i)
-        base (case mode
+        base (case (int mode)
                0 0
                2 (.base vm)
                (throw (ex-info "bad write param mode" {:mode mode})))]
     (+ base ((.mem vm) (+ (.pc vm) i)))))
 
-(defn- op-3 [vm f]
+(defn- op-3 [^VM vm f]
   (let [x (param vm 1)
         y (param vm 2)
         p (param-ptr vm 3)]
     (vm-next vm (+ (.pc vm) 4) p (f x y))))
 
-(defn- cond-jump [vm pred]
+(defn- cond-jump [^VM vm pred]
   (let [pc (if (pred (param vm 1))
              (param vm 2)
              (+ 3 (.pc vm)))]
     (vm-next vm pc)))
 
-(defn- vm-in [vm v]
+(defn- vm-in [^VM vm v]
   (assoc (vm-next vm (+ 2 (.pc vm)) (param-ptr vm 1) v) :halt nil))
 
-(defn- vm-out [vm]
+(defn- vm-out [^VM vm]
   (assoc (vm-next vm (+ 2 (.pc vm))) :halt nil))
 
-(defn- halt [vm reason & etc] (assoc vm :halt (apply vector reason etc)))
+(defn- halt [^VM vm reason & etc] (assoc vm :halt (apply vector reason etc)))
 
-(defn- run1 [vm]
-  (case ((.op vm) 0)
+(defn- run1 [^VM vm]
+  (case (int ((.op vm) 0))
     99 (halt vm :halt)
     1 (op-3 vm +)
     2 (op-3 vm *)
@@ -93,9 +95,9 @@
 (defn run
   ([vm] (run vm (chan)))
   ([vm in] (run vm in (chan)))
-  ([vm in out]
+  ([^VM vm in out]
    (go
-     (loop [vm vm]
+     (loop [^VM vm vm]
        (if-let [[reason v] (.halt vm)]
          (case reason
            :halt (do
@@ -106,7 +108,7 @@
            (throw (ex-info "weird halt" {:reason reason})))
          (recur (run1 vm)))))))
 
-(defn run-sync [vm ins]
+(defn run-sync [^VM vm ins]
   (loop [vm vm
          ins ins
          outs []]
