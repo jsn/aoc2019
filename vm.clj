@@ -23,9 +23,13 @@
 (defrecord VM [mem pc op halt base])
 
 (defn- parse-op [n]
-  (let [s (format "%05d" n)
-        opc (mod n 100)]
-    (into [opc] (reverse (map #(- (int %) (int \0)) (subs s 0 3))))))
+  (let [opc (rem n 100)
+        n (quot n 100)
+        a1 (rem n 10)
+        n (quot n 10)
+        a2 (rem n 10)
+        a3 (quot n 10)]
+    [opc a1 a2 a3]))
 
 (defn create
   ([mem] (create mem 0))
@@ -42,9 +46,9 @@
      (apply assoc vm :pc pc :mem mem :op op kvs))))
 
 (defn- param [^VM vm i]
-  (let [mode ((.op vm) i)
+  (let [mode (int ((.op vm) i))
         v ((.mem vm) (+ (.pc vm) i))]
-    (case (int ((.op vm) i))
+    (case mode
       0 ((.mem vm) v)
       1 v
       2 ((.mem vm) (+ (.base vm) v))
