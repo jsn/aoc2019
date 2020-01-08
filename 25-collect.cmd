@@ -27,9 +27,3 @@ south
 east
 take mouse
 south
-drop mug
-drop mutex
-drop food ration
-drop ornament
-west
-inv

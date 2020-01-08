@@ -78,7 +78,9 @@
         (recur))))
     )
 
-(defn one [] (runner))
+(defn one []
+  (binding [*in* (clojure.java.io/reader "25-1.cmd")]
+    (runner)))
 
 (defn two []
   "not implemented")
