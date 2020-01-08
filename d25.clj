@@ -51,10 +51,11 @@
            true rf)))
       ([result l]
        (vswap! lines conj l)
-       (when (or (> (count @lines) 100)
-               (re-matches #"^Command\?$" l))
-         (rf result @lines)
-         (vreset! lines []))))))
+       (if (> (count @lines) 100)
+         (reduced (rf result (conj @lines ::overflow)))
+         (when (re-matches #"^Command\?$" l)
+           (rf result @lines)
+           (vreset! lines [])))))))
 
 (defn runner []
   (let [code (read-input)

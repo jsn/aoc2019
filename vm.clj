@@ -101,9 +101,7 @@
            :halt (do
                    (close! out)
                    vm)
-           :out (do
-                  (>! out v)
-                  (recur (vm-out vm)))
+           :out (if (>! out v) (recur (vm-out vm)) vm)
            :in (recur (vm-in vm (<! in)))
            (throw (ex-info "weird halt" {:reason reason})))
          (recur (run1 vm)))))))
