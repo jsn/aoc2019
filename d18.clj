@@ -80,9 +80,10 @@
 (defn item-pos [p]
   (if (or (nil? p) (= p \@))
     (:p *WORLD*)
-    (->> *WORLD* :cells (filter (fn [[k v]] (= v p))) first first)))
+    (if (vector? p) p
+      (->> *WORLD* :cells (filter (fn [[k v]] (= v p))) first first))))
 
-(defn path-len [src dst]
+(defn step-len [src dst]
   (let [src (item-pos src)
         dst (item-pos dst)
         traces (trace-keys {src nil})]
@@ -148,12 +149,34 @@
    \d \u \h
    \w \c])
 
+(defn path-len [steps]
+  (apply + (map (fn [[src dst]] (step-len src dst))(partition 2 1 steps))))
 
-(defn one []
-  (apply + (map (fn [[src dst]] (path-len src dst))(partition 2 1 *STEPS*))))
+(defn one [] (path-len *STEPS*))
+
+(defn patch-world []
+  (let [cells (:cells *WORLD*)
+        cells (assoc cells [39 40] \# [41 40] \# [40 39] \# [40 41] \#)]
+    (assoc *WORLD* :cells cells)))
+
+(defn trace-tree [start]
+  (let [traces (trace-keys {start nil})]
+    (->> traces (map rest) (traces->tree start nil 0))))
+
+(binding [*WORLD* (patch-world)]
+  (let [traces (mapcat trace-tree (for [x [39 41] y [39 41]] [x y]))
+        tree (tree->dot traces)]
+    (spit "18b.dot" tree)))
+
+(def *STEPS2*
+  [[[39 41] \x \j \m \w \c]
+   [[41 39] \y \t]
+   [[39 39] \i \p \q]
+   [[41 41] \d \h \u]])
 
 (defn two []
-  "not implemented")
+  (binding [*WORLD* (patch-world)]
+    (apply + (map path-len *STEPS2*))))
 
 (defn -main [& args]
   (println "1." (one))
