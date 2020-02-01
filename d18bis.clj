@@ -35,8 +35,8 @@
       (recur (assoc opts :done done' :border border'))
       done')))
 
-(let [p [1 10]]
-  (for [f [inc dec] i [0 1] :let [p' (update p i f)]] p'))
+;(let [p [1 10]]
+;  (for [f [inc dec] i [0 1] :let [p' (update p i f)]] p'))
 
 (defn neighbours [p]
   (for [f [inc dec] i [0 1]
@@ -129,7 +129,7 @@
 (defn passable? [k has]
   (or (not (door-tile? k)) (-> k str .toLowerCase first char has)))
 
-(passable? \K #{\z \k})
+;(passable? \K #{\z \k})
 
 (defn next-keys
   ([p has] (next-keys p has nil 0))
@@ -191,7 +191,6 @@
             (recur (merge fscore d-fs)
                    (merge gscore d-gs)
                    (merge camefrom d-cf))))))))
-
 
 (defmacro with-input [input & body]
   `(binding [*WORLD* (->> ~input pic->world)]
