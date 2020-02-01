@@ -144,8 +144,6 @@
                  (next-keys p' has p (+ dist d))))
              (*TREE* p)))))
 
-(comment (next-keys \k #{\k \x \y \g}))
-
 (defn h
   ([p has] (if-let [[total longest] (h p has nil 0)] (- (* 2 total) longest) 0))
   ([p has from dist]
@@ -158,8 +156,6 @@
        [(apply + dist (map first cs)) (+ dist (apply max (map second cs)))]
        (when (and (key-tile? p) (not (has p)))
          [dist dist])))))
-
-(comment (h \@ #{}))
 
 (defn build-path [camefrom start finish]
   (loop [rv nil
@@ -197,20 +193,61 @@
                    (merge camefrom d-cf))))))))
 
 
-(defn one [] (time (path-len (a* \@))))
-
-(defn two []
-  "not implemented"
-  )
-
-(defn -main [& args]
-  (println "1." (one))
-  (println "2." (two)))
-
 (defmacro with-input [input & body]
   `(binding [*WORLD* (->> ~input pic->world)]
      (binding [*TREE* (world-tree)]
        ~@body)))
+
+(defn one [] (time (path-len (a* \@))))
+
+(defn cut-and-cull [grid xl xr yl yr]
+  (let [grid (mapv #(subvec % xl (inc xr)) (subvec grid yl (inc yr)))
+        tiles (set (apply concat grid))
+        ks (filter key-tile? tiles)
+        bad-doors (zipmap (filter door-tile? tiles) (repeat \.))
+        grid (mapv (fn [v] (mapv #(or (bad-doors %) %) v)) grid)]
+    grid))
+
+(defn patch-and-cut [pic]
+  (let [world (pic->world pic)
+        [x y] (get-in world [:pois \@])
+        grid (-> (->> pic str/split-lines (mapv vec))
+                 (assoc-in [y x] \#)
+                 (assoc-in [(dec y) x] \#)
+                 (assoc-in [(inc y) x] \#)
+                 (assoc-in [y (dec x)] \#)
+                 (assoc-in [y (inc x)] \#)
+
+                 (assoc-in [(dec y) (dec x)] \@)
+                 (assoc-in [(inc y) (dec x)] \@)
+                 (assoc-in [(inc y) (inc x)] \@)
+                 (assoc-in [(dec y) (inc x)] \@))]
+    [(cut-and-cull grid 0 x 0 y)
+     (cut-and-cull grid x (dec (:w world)) 0 y)
+     (cut-and-cull grid 0 x y(dec (:h world)))
+     (cut-and-cull grid x (dec (:w world)) y (dec (:h world)))]))
+
+(defn grid->pic [grid]
+  (map #(str/join "\n" (map (partial apply str) %)) grid))
+
+(defn solve-one [pic]
+  (with-input pic
+    (let [path (a* \@)]
+      ; (prn path)
+      (path-len path))))
+
+(defn two []
+  (->> "18.in"
+       slurp
+       patch-and-cut
+       grid->pic
+       (map solve-one)
+       (apply +)
+       time))
+
+(defn -main [& args]
+  (println "1." (one))
+  (println "2." (two)))
 
 (deftest everything
   (testing "a tests"
@@ -220,8 +257,3 @@
       (is (= (path-len (a* \@)) 136)))
     (with-input (slurp "t18-3.in")
       (is (= (path-len (a* \@)) 81)))))
-
-(comment
-(with-input (slurp "t18-2.in")
-  (path-len (a* \@)))
-)
