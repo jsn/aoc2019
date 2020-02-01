@@ -1,5 +1,6 @@
 {
  :paths ["."]
  :deps {org.clojure/math.combinatorics {:mvn/version "0.1.6"}
-        org.clojure/core.async {:mvn/version "0.6.532"}}
+        org.clojure/core.async {:mvn/version "0.6.532"}
+        org.clojure/data.priority-map {:mvn/version "0.0.10"}}
 }
