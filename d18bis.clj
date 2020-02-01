@@ -52,9 +52,6 @@
 
 (defn item-pos [p] (if (vector? p) p (get-in *WORLD* [:pois (or p \@)])))
 
-(defn path-len [steps]
-  (apply + (map (fn [[src dst]] (step-len src dst))(partition 2 1 steps))))
-
 (defn trace-keys [start]
   (let [traces (bfs {:border {(item-pos start) nil}
                      :next-f neighbours
@@ -65,14 +62,18 @@
          (filter (fn [[p t]] (key-tile? t)))
          (map #(-> % first traces reverse)))))
 
-(defn step-len [src dst]
-  (let [p (item-pos dst)
-        traces (trace-keys src)]
-    (->> traces
-         (filter #(= (last %) p))
-         first
-         count
-         dec)))
+(def step-len*
+ (memoize
+  (fn [w src dst]
+    (let [p (item-pos dst)
+          traces (trace-keys src)]
+      (->> traces
+           (filter #(= (last %) p))
+           first
+           count
+           dec)))))
+
+(defn step-len [src dst] (step-len* *WORLD* src dst))
 
 (defn path-len [steps]
   (apply + (map (fn [[src dst]] (step-len src dst))(partition 2 1 steps))))
@@ -104,9 +105,22 @@
        (mapcat #(vector % (reverse %)))
        (reduce (fn [c [a dist b]] (assoc-in c [a b] dist)) {})))
 
+(defn fat-start? []
+  (let [[x y] (-> *WORLD* :pois (get \@))
+        tiles (for [dx [-1 0 1] dy [-1 0 1]
+                    :let [x (+ x dx) y (+ y dy)]
+                    :let [t (get-in *WORLD* [:cells [x y]])]]
+                t)]
+    (not-any? #{\#} tiles)))
+
+(defn drop-fat-start [traces]
+  (cond->> traces
+    (fat-start?) (map (partial drop 2))))
+
 (defn world-tree []
   (->> (trace-keys nil)
        (map rest)
+       drop-fat-start
        (traces->tree \@ nil 0)
        edges->map))
 
@@ -169,7 +183,7 @@
           (let
             [fscore (pop fscore)
              nexts (for [[d p'] (next-keys p has)
-                         :let [g (+ (gscore [p has]) d)
+                         :let [g (+ (gscore [p has]) (step-len p p'))
                                has' (conj has p')]
                          :when (< g (get gscore [p' has'] Integer/MAX_VALUE))]
                      [[p' has'] g])
@@ -182,13 +196,32 @@
                    (merge gscore d-gs)
                    (merge camefrom d-cf))))))))
 
-(path-len (a* \@))
+
+(defn one [] (time (path-len (a* \@))))
+
+(defn two []
+  "not implemented"
+  )
+
+(defn -main [& args]
+  (println "1." (one))
+  (println "2." (two)))
 
 (defmacro with-input [input & body]
   `(binding [*WORLD* (->> ~input pic->world)]
      (binding [*TREE* (world-tree)]
        ~@body)))
 
+(deftest everything
+  (testing "a tests"
+    (with-input (slurp "t18-1.in")
+      (is (= (path-len (a* \@)) 8)))
+    (with-input (slurp "t18-2.in")
+      (is (= (path-len (a* \@)) 136)))
+    (with-input (slurp "t18-3.in")
+      (is (= (path-len (a* \@)) 81)))))
+
+(comment
 (with-input (slurp "t18-2.in")
   (path-len (a* \@)))
-  
+)
